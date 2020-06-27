@@ -1,8 +1,6 @@
 import ParameterMode.*
 
 sealed class OpCode() {
-    abstract fun size(): Int
-
     companion object {
         fun fromInt(code: Int): OpCode {
             return when (code) {
@@ -19,30 +17,30 @@ sealed class OpCode() {
     }
 }
 
+abstract class ArithmeticOperation : OpCode()
 
-object Add : OpCode() {
-    override fun size(): Int = 4
-}
+abstract class InputOutputOperation: OpCode()
 
-object Multiply : OpCode() {
-    override fun size(): Int = 4
-}
+object Add : ArithmeticOperation()
 
-object Read : OpCode() {
-    override fun size(): Int = 2
-}
+object Multiply : ArithmeticOperation()
 
-object Write : OpCode() {
-    override fun size(): Int = 2
-}
+object Read : InputOutputOperation()
 
-object Terminate : OpCode() {
-    override fun size(): Int = 1
+object Write : InputOutputOperation()
+
+object Terminate : OpCode()
+
+fun instructionSize(opCode: OpCode): Int = when(opCode) {
+    is ArithmeticOperation -> 4
+    is InputOutputOperation -> 2
+    Terminate -> 1
 }
 
 class Instruction(opCode: OpCode, parameterValues: List<Int>, parameterModes: List<Int>) {
     val parameters: List<Parameter> = when (opCode) {
-        is Add, is Multiply -> {
+        is Terminate -> listOf()
+        else -> {
             assert(parameterValues.size == parameterModes.size)
             parameterValues.mapIndexed { index, _ ->
                 if (parameterModes[index] == 0) {
@@ -52,22 +50,14 @@ class Instruction(opCode: OpCode, parameterValues: List<Int>, parameterModes: Li
                 }
             }
         }
-        is Read, is Write -> {
-            if (parameterModes[0] == 0) {
-                listOf(Parameter(parameterValues.first(), PositionMode))
-            } else {
-                listOf(Parameter(parameterValues.first(), ImmediateMode))
-            }
-        }
-        is Terminate -> listOf()
     }
 }
 
 data class Parameter(val value: Int, val mode: ParameterMode)
 
-enum class ParameterMode(val mode: Int) {
-    PositionMode(0),
-    ImmediateMode(1)
+enum class ParameterMode {
+    PositionMode,
+    ImmediateMode
 }
 
 data class Program(val instructions: MutableList<Int>, val input: Int) {
@@ -80,7 +70,7 @@ data class Program(val instructions: MutableList<Int>, val input: Int) {
             // backward compatibility for Day 2
             OpCode.fromInt(instruction.toInt())
         }
-        val parameterValues = instructions.slice((pointer + 1 until pointer + opcode.size()))
+        val parameterValues = instructions.slice((pointer + 1 until pointer + instructionSize(opcode)))
 
         val modes = if (instruction.length != 1) {
             val givenModes = instruction.dropLast(2)
@@ -93,57 +83,46 @@ data class Program(val instructions: MutableList<Int>, val input: Int) {
         val instruct = Instruction(opcode, parameterValues, modes)
 
         val result = when (opcode) {
-            is Add, is Multiply -> {
+            is ArithmeticOperation -> {
                 val op1 = instruct.parameters[0]
                 val op2 = instruct.parameters[1]
                 val target = instruct.parameters[2]
                 if (opcode is Add) {
                     applyOperation(target, op1, op2) { a, b -> a + b }
-                } else {
+                } else if (opcode is Multiply) {
                     applyOperation(target, op1, op2) { a, b -> a * b }
                 }
                 instructions
             }
-            is Read -> {
-                val param = instruct.parameters[0]
-                if(param.mode == PositionMode) {
-                    instructions[param.value] = input
-                } else {
-                    val address = instructions[param.value]
-                    instructions[address] = input
-                }
-                instructions
-            }
-            is Write -> {
-                val param = instruct.parameters[0]
-                if(param.mode == PositionMode) {
-                    println("OUT: ${instructions[param.value]}")
-                } else {
-                    val address = instructions[param.value]
-                    println("OUT: ${instructions[instructions[address]]}")
+            is InputOutputOperation -> {
+                val value = interpretTarget(instruct.parameters[0])
+                if(opcode is Write) {
+                    println("OUT: ${instructions[value]}")
+                } else if(opcode is Read) {
+                    instructions[value] = input
                 }
                 instructions
             }
             is Terminate -> instructions
         }
-        return Pair(pointer + opcode.size(), result)
+        return Pair(pointer + instructionSize(opcode), result)
     }
 
     private fun applyOperation(target: Parameter, op1: Parameter, op2: Parameter, operation: (Int, Int) -> Int) {
-        if (target.mode == PositionMode) {
-            instructions[target.value] = operation(interpretParameter(op1), interpretParameter(op2))
-        } else {
-            val address = instructions[target.value]
-            instructions[address] = operation(interpretParameter(op1), interpretParameter(op2))
-        }
+        instructions[interpretTarget(target)] = operation(interpretOperand(op1), interpretOperand(op2))
     }
 
-    private fun interpretParameter(op1: Parameter) = if (op1.mode == PositionMode) {
-        instructions[op1.value]
+    private fun interpretOperand(param: Parameter) = if (param.mode == PositionMode) {
+        instructions[param.value]
     } else {
-        op1.value
+        param.value
     }
 
+    private fun interpretTarget(param: Parameter) = if (param.mode == PositionMode) {
+        param.value
+    } else {
+        instructions[param.value]
+    }
 }
 
 fun run(programText: String, input: Int = -1): String {
@@ -153,7 +132,7 @@ fun run(programText: String, input: Int = -1): String {
     loop@ while (true) {
         val instruction = program.instructions[pointer]
         val opCode = OpCode.fromInt(instruction.toString().takeLast(2).toInt())
-//        println("executing ${program.instructions.slice(pointer until pointer+opCode.size())} at $pointer")
+//        println("executing ${program.instructions.slice(pointer until pointer+instructionSize(opCode))} at $pointer")
         if (opCode is Terminate)
             break@loop
         val (updatedPointer, updatedInstructions) = program.execute(pointer)
