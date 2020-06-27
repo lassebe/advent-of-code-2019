@@ -12,45 +12,14 @@ fun main() {
 fun findNounAndVerb(program: String, target: Int): Int {
     for (noun in (0..1000)) {
         for (verb in (0..1000)) {
-            if(run("1,$noun,$verb,${program.drop(6)}").split(",").first().toInt() == target) {
-                return (100*noun) + verb
+            try {
+                if(run("1,$noun,$verb,${program.drop(6)}").split(",").first().toInt() == target) {
+                    return (100*noun) + verb
+                }
+            } catch(e: IndexOutOfBoundsException) {
+                // we may be generating incorrect programs.
             }
         }
     }
     return -1
 }
-
-fun run(program: String): String {
-    val instructions = program.split(",").map { it.toInt() }.toMutableList()
-    var pointer = 0
-    var currentInstruction = instructions[pointer]
-    loop@ while (true) {
-        when (currentInstruction) {
-            1, 2 -> {
-                val firstOperandAddress = instructions[pointer + 1]
-                val secondOperandAddress = instructions[pointer + 2]
-                val targetAddress = instructions[pointer + 3]
-                if(firstOperandAddress >= instructions.size || secondOperandAddress >= instructions.size || targetAddress >= instructions.size)
-                    return "1"
-
-                if (currentInstruction == 1) {
-                    instructions[targetAddress] = instructions[firstOperandAddress] + instructions[secondOperandAddress]
-                } else if (currentInstruction == 2) {
-                    instructions[targetAddress] = instructions[firstOperandAddress] * instructions[secondOperandAddress]
-                }
-                pointer += 4
-            }
-            99 -> {
-                break@loop
-            }
-            else -> {
-                println(currentInstruction)
-                throw Exception("Incorrect instruction")
-            }
-        }
-        currentInstruction = instructions[pointer]
-
-    }
-    return instructions.joinToString(",")
-}
-
