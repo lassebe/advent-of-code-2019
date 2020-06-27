@@ -1,3 +1,5 @@
+import kotlin.math.abs
+
 fun main() {
     println(validPasswords(246540, 787419).size)
 }
@@ -18,11 +20,12 @@ fun validPasswords(start: Int, end: Int): MutableList<Int> {
 }
 
 fun String.adjacentEquality(): Boolean {
-    for (i in 1 until this.length) {
-        if (this[i - 1] == this[i]) return true
+    val mappings = mutableMapOf<Char, List<Int>>()
+    (this.indices).forEach {
+        val digit = this[it]
+        mappings[digit] =  mappings[digit]?.plus(it) ?: listOf(it)
     }
-
-    return false
+    return mappings.any { (_, indices) -> indices.size == 2 && abs(indices[0] - indices[1]) == 1 }
 }
 
 fun String.increasing(digit: Int): Boolean = this.asSequence().all { it.toInt() >= digit }
