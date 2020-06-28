@@ -1,5 +1,7 @@
+import java.io.File
+
 fun main() {
-    val modules = readInts("input/modules.txt")
+    val modules = File("input/modules.txt").readLines().map { it.toInt() }
     part1(modules)
     part2(modules)
 }
