@@ -78,7 +78,7 @@ enum class ParameterMode {
     ImmediateMode
 }
 
-data class Program(val instructions: MutableList<Int>, val input: Int, var output: Int, val debug: Boolean = false) {
+data class Program(val instructions: MutableList<Int>, val input: MutableList<Int>, var output: Int, val debug: Boolean = false) {
 
     fun execute(pointer: Int): Pair<Int, List<Int>> {
         val instruction = instructions[pointer].toString()
@@ -131,7 +131,7 @@ data class Program(val instructions: MutableList<Int>, val input: Int, var outpu
                 } else if (opcode is Read) {
                     val value = interpretTarget(parameter)
                     if (debug) println("Read $input into $value")
-                    instructions[value] = input
+                    instructions[value] = input.removeAt(0)
                 }
                 instructions
             }
@@ -183,7 +183,11 @@ data class Program(val instructions: MutableList<Int>, val input: Int, var outpu
     }
 }
 
-fun run(programText: String, input: Int = -1, debug: Boolean = false): Pair<String, Int> {
+fun run(programText: String, input: Int, debug: Boolean = false): Pair<String, Int> =
+    run(programText, mutableListOf(input), debug)
+
+
+fun run(programText: String, input: MutableList<Int> = mutableListOf(), debug: Boolean = false): Pair<String, Int> {
     val instructions = programText.split(",").map { it.toInt() }.toMutableList()
     var program = Program(instructions, input = input, output = -1, debug = debug)
     var pointer = 0
