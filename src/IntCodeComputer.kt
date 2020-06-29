@@ -66,11 +66,11 @@ class Instruction(private val opCode: OpCode, parameterValues: List<Int>, parame
 }
 
 data class Parameter(val value: Int, val mode: ParameterMode) {
-//    override fun toString(): String = if(mode == PositionMode) {
-//        "&$value"
-//    } else {
-//        value.toString()
-//    }
+    override fun toString(): String = if(mode == PositionMode) {
+        "&$value"
+    } else {
+        value.toString()
+    }
 }
 
 enum class ParameterMode {
@@ -187,43 +187,7 @@ fun run(programText: String, input: Int = -1, debug: Boolean = false): Pair<Stri
     val instructions = programText.split(",").map { it.toInt() }.toMutableList()
     var program = Program(instructions, input = input, output = -1, debug = debug)
     var pointer = 0
-    if(debug) {
-        loop2@ while (true) {
-            val ins = program.instructions[pointer]
-            try {
-                val opCode = OpCode.fromInt(ins.toString().takeLast(2).toInt())
-
-                if (opCode is Terminate)
-                    break@loop2
-                val instruction = instructions[pointer].toString()
-
-                val opcode = if (instruction.length != 1) {
-                    OpCode.fromInt(instruction.takeLast(2).toInt())
-                } else {
-                    // backward compatibility for Day 2
-                    OpCode.fromInt(instruction.toInt())
-                }
-                val parameterValues = instructions.slice((pointer + 1 until pointer + instructionSize(opcode)))
-
-                val modes = if (instruction.length != 1) {
-                    val givenModes = instruction.dropLast(2)
-                    givenModes.padStart(parameterValues.size, '0').asSequence().map { Character.getNumericValue(it) }.toList().reversed()
-                } else {
-                    // backward compatibility for Day 2
-                    List(parameterValues.size) { 0 }
-                }
-
-                val instruct = Instruction(opcode, parameterValues, modes)
-                println("$pointer: $instruct")
-                pointer += instructionSize(opcode)
-
-            }catch(e: java.lang.Exception) {
-                pointer++
-            }
-
-        }
-    }
-    pointer = 0
+    if(debug) { printReadableProgram(program, instructions) }
 
     loop@ while (true) {
         val instruction = program.instructions[pointer]
@@ -239,5 +203,43 @@ fun run(programText: String, input: Int = -1, debug: Boolean = false): Pair<Stri
     }
     if (debug) println()
     return Pair(program.instructions.joinToString(","), program.output)
+}
+
+private fun printReadableProgram(program: Program, instructions: MutableList<Int>): Int {
+    var pointer = 0
+    loop@ while (true) {
+        val ins = program.instructions[pointer]
+        try {
+            val opCode = OpCode.fromInt(ins.toString().takeLast(2).toInt())
+
+            if (opCode is Terminate)
+                break@loop
+            val instruction = instructions[pointer].toString()
+
+            val opcode = if (instruction.length != 1) {
+                OpCode.fromInt(instruction.takeLast(2).toInt())
+            } else {
+                // backward compatibility for Day 2
+                OpCode.fromInt(instruction.toInt())
+            }
+            val parameterValues = instructions.slice((pointer + 1 until pointer + instructionSize(opcode)))
+
+            val modes = if (instruction.length != 1) {
+                val givenModes = instruction.dropLast(2)
+                givenModes.padStart(parameterValues.size, '0').asSequence().map { Character.getNumericValue(it) }.toList().reversed()
+            } else {
+                // backward compatibility for Day 2
+                List(parameterValues.size) { 0 }
+            }
+
+            val instruct = Instruction(opcode, parameterValues, modes)
+            println("$pointer: $instruct")
+            pointer += instructionSize(opcode)
+
+        } catch (e: java.lang.Exception) {
+            pointer++
+        }
+    }
+    return pointer
 }
 
