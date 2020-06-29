@@ -66,7 +66,7 @@ class Instruction(private val opCode: OpCode, parameterValues: List<Int>, parame
 }
 
 data class Parameter(val value: Int, val mode: ParameterMode) {
-    override fun toString(): String = if(mode == PositionMode) {
+    override fun toString(): String = if (mode == PositionMode) {
         "&$value"
     } else {
         value.toString()
@@ -130,7 +130,10 @@ data class Program(val instructions: MutableList<Int>, val input: MutableList<In
                     output = value
                 } else if (opcode is Read) {
                     val value = interpretTarget(parameter)
-                    if (debug) println("Read $input into $value")
+                    if (input.size == 0) {
+                        return Pair(pointer, instructions)
+                    }
+                    if (debug) println("Read ${input[0]} into $value")
                     instructions[value] = input.removeAt(0)
                 }
                 instructions
@@ -155,7 +158,7 @@ data class Program(val instructions: MutableList<Int>, val input: MutableList<In
                     }
                 }
 
-                if(condition(guard)) {
+                if (condition(guard)) {
                     if (debug) println("Jump to $target")
                     return Pair(target, instructions)
                 }
@@ -183,15 +186,23 @@ data class Program(val instructions: MutableList<Int>, val input: MutableList<In
     }
 }
 
-fun run(programText: String, input: Int, debug: Boolean = false): Pair<String, Int> =
-    run(programText, mutableListOf(input), debug)
+fun run(programText: String, input: Int, debug: Boolean = false): SuspendedProgram =
+        run(programText, mutableListOf(input), debug = debug)
 
 
-fun run(programText: String, input: MutableList<Int> = mutableListOf(), debug: Boolean = false): Pair<String, Int> {
+fun run(programText: String,
+        input: MutableList<Int> = mutableListOf(),
+        startAt: Int = 0,
+        debug: Boolean = false,
+        suspendOnRead: Boolean = false
+): SuspendedProgram {
     val instructions = programText.split(",").map { it.toInt() }.toMutableList()
     var program = Program(instructions, input = input, output = -1, debug = debug)
-    var pointer = 0
-    if(debug) { printReadableProgram(program, instructions) }
+    var pointer = startAt
+    if (debug) {
+        printReadableProgram(program, instructions)
+    }
+
 
     loop@ while (true) {
         val instruction = program.instructions[pointer]
@@ -200,14 +211,26 @@ fun run(programText: String, input: MutableList<Int> = mutableListOf(), debug: B
 
         if (opCode is Terminate)
             break@loop
+        if (opCode is Read && input.size == 0 && suspendOnRead) {
+            val (updatedPointer, updatedInstructions) = program.execute(pointer)
+            return SuspendedProgram(updatedInstructions.joinToString(","), program.output, updatedPointer, false)
+        }
         val (updatedPointer, updatedInstructions) = program.execute(pointer)
         pointer = updatedPointer
         program = Program(updatedInstructions.toMutableList(), input, program.output, debug)
-        if(debug) println("next is  $pointer\n")
+        if (debug) println("next is  $pointer\n")
     }
-    if (debug) println()
-    return Pair(program.instructions.joinToString(","), program.output)
+    if (debug) println("Terminating with ${program.output}")
+    return SuspendedProgram(program.instructions.joinToString(","), program.output)
 }
+
+data class SuspendedProgram(
+        val instructions: String,
+        val output: Int,
+        val pointer: Int = -1,
+        val terminated: Boolean = true
+)
+
 
 private fun printReadableProgram(program: Program, instructions: MutableList<Int>): Int {
     var pointer = 0
