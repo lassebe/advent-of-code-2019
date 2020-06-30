@@ -21,24 +21,52 @@ sealed class OpCode {
     }
 }
 
-abstract class ArithmeticOperation : OpCode()
+abstract class ArithmeticOperation : OpCode() {
+    abstract fun operation(a: Int, b: Int): Int
+}
 
 abstract class InputOutputOperation : OpCode()
 
-abstract class JumpOperation : OpCode()
+abstract class JumpOperation : OpCode() {
+    abstract fun condition(arg: Int): Boolean
+}
 
-object Add : ArithmeticOperation()
-object Multiply : ArithmeticOperation()
-object LessThan : ArithmeticOperation()
-object Equals : ArithmeticOperation()
+object Add : ArithmeticOperation() {
+    override fun operation(a: Int, b: Int): Int = a + b
+}
+
+object Multiply : ArithmeticOperation() {
+    override fun operation(a: Int, b: Int): Int = a * b
+}
+
+object LessThan : ArithmeticOperation() {
+    override fun operation(a: Int, b: Int): Int = if (a < b) 1 else 0
+}
+
+object Equals : ArithmeticOperation() {
+    override fun operation(a: Int, b: Int): Int = if (a == b) 1 else 0
+}
 
 object Read : InputOutputOperation()
 object Write : InputOutputOperation()
 
-object JumpIfTrue : JumpOperation()
-object JumpIfFalse : JumpOperation()
+object JumpIfTrue : JumpOperation() {
+    override fun condition(arg: Int): Boolean = arg != 0
+}
+
+object JumpIfFalse : JumpOperation() {
+    override fun condition(arg: Int): Boolean = arg == 0
+}
 
 object Terminate : OpCode()
+
+data class Parameter(val value: Int, val mode: ParameterMode) {
+    override fun toString(): String = if (mode == PositionMode) {
+        "&$value"
+    } else {
+        value.toString()
+    }
+}
 
 fun instructionSize(opCode: OpCode): Int = when (opCode) {
     is ArithmeticOperation -> 4
@@ -47,13 +75,12 @@ fun instructionSize(opCode: OpCode): Int = when (opCode) {
     Terminate -> 1
 }
 
-class Instruction(private val opCode: OpCode, parameterValues: List<Int>, parameterModes: List<Int>) {
+class Instruction(val opCode: OpCode, parameterValues: List<Int>, parameterModes: Map<Int, Int>) {
     val parameters: List<Parameter> = when (opCode) {
         is Terminate -> listOf()
         else -> {
-            assert(parameterValues.size == parameterModes.size)
             parameterValues.mapIndexed { index, _ ->
-                if (parameterModes[index] == 0) {
+                if (parameterModes.getOrDefault(index, 0) == 0) {
                     Parameter(parameterValues[index], PositionMode)
                 } else {
                     Parameter(parameterValues[index], ImmediateMode)
@@ -65,14 +92,6 @@ class Instruction(private val opCode: OpCode, parameterValues: List<Int>, parame
     override fun toString(): String = "${opCode.toString().split("@")[0]}: ${parameters.joinToString(" ")}"
 }
 
-data class Parameter(val value: Int, val mode: ParameterMode) {
-    override fun toString(): String = if (mode == PositionMode) {
-        "&$value"
-    } else {
-        value.toString()
-    }
-}
-
 enum class ParameterMode {
     PositionMode,
     ImmediateMode
@@ -81,6 +100,53 @@ enum class ParameterMode {
 data class Program(val instructions: MutableList<Int>, val input: MutableList<Int>, var output: Int, val debug: Boolean = false) {
 
     fun execute(pointer: Int): Pair<Int, List<Int>> {
+        val instruction = parseInstruction(pointer)
+
+        return when (val opCode = instruction.opCode) {
+            is ArithmeticOperation -> {
+                val op1 = interpretOperand(instruction.parameters[0])
+                val op2 = interpretOperand(instruction.parameters[1])
+                val target = interpretTarget(instruction.parameters[2])
+                if (debug) println("${opCode.toString().split("@")[0]} $op1 $op2 $target")
+                instructions[target] = opCode.operation(op1, op2)
+                Pair(pointer + instructionSize(opCode), instructions)
+            }
+
+            is InputOutputOperation -> {
+                val parameter = instruction.parameters[0]
+
+                if (opCode is Write) {
+                    val value = interpretOperand(parameter)
+                    if (debug) println("Write $value")
+                    output = value
+                } else if (opCode is Read) {
+                    val value = interpretTarget(parameter)
+                    if (input.size == 0) {
+                        return Pair(pointer, instructions)
+                    }
+                    if (debug) println("Read ${input[0]} into $value")
+                    instructions[value] = input.removeAt(0)
+                }
+                Pair(pointer + instructionSize(opCode), instructions)
+            }
+
+            is JumpOperation -> {
+                val guard = interpretOperand(instruction.parameters[0])
+                val target = interpretOperand(instruction.parameters[1])
+
+                if (opCode.condition(guard)) {
+                    if (debug) println("Jump to :$target")
+                    return Pair(target, instructions)
+                }
+                Pair(pointer + instructionSize(opCode), instructions)
+            }
+            is Terminate -> Pair(pointer + instructionSize(opCode), instructions)
+
+        }
+    }
+
+
+    private fun parseInstruction(pointer: Int): Instruction {
         val instruction = instructions[pointer].toString()
 
         val opcode = if (instruction.length != 1) {
@@ -89,88 +155,18 @@ data class Program(val instructions: MutableList<Int>, val input: MutableList<In
             // backward compatibility for Day 2
             OpCode.fromInt(instruction.toInt())
         }
-        val parameterValues = instructions.slice((pointer + 1 until pointer + instructionSize(opcode)))
 
+        val parameterValues = instructions.slice((pointer + 1 until pointer + instructionSize(opcode)))
         val modes = if (instruction.length != 1) {
-            val givenModes = instruction.dropLast(2)
-            givenModes.padStart(parameterValues.size, '0').asSequence().map { Character.getNumericValue(it) }.toList().reversed()
+            instruction.dropLast(2).reversed().mapIndexed { index, mode ->
+                index to Character.getNumericValue(mode)
+            }.toMap()
         } else {
             // backward compatibility for Day 2
-            List(parameterValues.size) { 0 }
+            emptyMap()
         }
 
-        val instruct = Instruction(opcode, parameterValues, modes)
-
-        val result = when (opcode) {
-            is ArithmeticOperation -> {
-                val op1 = instruct.parameters[0]
-                val op2 = instruct.parameters[1]
-                val target = instruct.parameters[2]
-                val operation = { a: Int, b: Int ->
-                    when (opcode) {
-                        is Add -> a + b
-                        is Multiply -> a * b
-                        is LessThan -> if (a < b) 1 else 0
-                        is Equals -> if (a == b) 1 else 0
-                        else -> throw Exception("Should not be possible")
-                    }
-                }
-                if (debug) println("${opcode.toString().split("@")[0]} ${interpretOperand(op1)} ${interpretOperand(op2)} ${interpretTarget(target)}")
-
-                applyOperation(target, op1, op2, operation)
-                instructions
-            }
-
-            is InputOutputOperation -> {
-                val parameter = instruct.parameters[0]
-
-                if (opcode is Write) {
-                    val value = interpretOperand(parameter)
-                    if (debug) println("Write $value")
-                    output = value
-                } else if (opcode is Read) {
-                    val value = interpretTarget(parameter)
-                    if (input.size == 0) {
-                        return Pair(pointer, instructions)
-                    }
-                    if (debug) println("Read ${input[0]} into $value")
-                    instructions[value] = input.removeAt(0)
-                }
-                instructions
-            }
-
-            is JumpOperation -> {
-                val guard = interpretOperand(instruct.parameters[0])
-                val target = interpretOperand(instruct.parameters[1])
-                val condition = { arg: Int ->
-                    when (opcode) {
-                        is JumpIfTrue -> {
-                            if (debug) println("JumpIfTrue $arg")
-                            arg != 0
-                        }
-                        is JumpIfFalse -> {
-                            if (debug) println("JumpIfFalse $arg")
-                            arg == 0
-                        }
-                        else -> {
-                            throw Exception("Invalid Jump Instruction!")
-                        }
-                    }
-                }
-
-                if (condition(guard)) {
-                    if (debug) println("Jump to $target")
-                    return Pair(target, instructions)
-                }
-                instructions
-            }
-            is Terminate -> instructions
-        }
-        return Pair(pointer + instructionSize(opcode), result)
-    }
-
-    private fun applyOperation(target: Parameter, op1: Parameter, op2: Parameter, operation: (Int, Int) -> Int) {
-        instructions[interpretTarget(target)] = operation(interpretOperand(op1), interpretOperand(op2))
+        return Instruction(opcode, parameterValues, modes)
     }
 
     private fun interpretOperand(param: Parameter) = if (param.mode == PositionMode) {
@@ -184,6 +180,29 @@ data class Program(val instructions: MutableList<Int>, val input: MutableList<In
     } else {
         instructions[param.value]
     }
+
+
+    fun printReadable(): Int {
+        var pointer = 0
+        loop@ while (pointer < instructions.size) {
+            val ins = instructions[pointer]
+            try {
+                val opCode = OpCode.fromInt(ins.toString().takeLast(2).toInt())
+
+                if (opCode is Terminate)
+                    break@loop
+
+                val instruction = parseInstruction(pointer)
+                println("$pointer: $instruction")
+                pointer += instructionSize(instruction.opCode)
+            } catch (e: java.lang.Exception) {
+                println("Invalid instruction")
+                pointer++
+            }
+        }
+        return pointer
+    }
+
 }
 
 fun run(programText: String, input: Int, debug: Boolean = false): SuspendedProgram =
@@ -192,36 +211,37 @@ fun run(programText: String, input: Int, debug: Boolean = false): SuspendedProgr
 
 fun run(programText: String,
         input: MutableList<Int> = mutableListOf(),
-        startAt: Int = 0,
+        initialPointer: Int = 0,
         debug: Boolean = false,
         suspendOnRead: Boolean = false
 ): SuspendedProgram {
     val instructions = programText.split(",").map { it.toInt() }.toMutableList()
     var program = Program(instructions, input = input, output = -1, debug = debug)
-    var pointer = startAt
+    var pointer = initialPointer
     if (debug) {
-        printReadableProgram(program, instructions)
+        program.printReadable()
     }
-
 
     loop@ while (true) {
         val instruction = program.instructions[pointer]
         val opCode = OpCode.fromInt(instruction.toString().takeLast(2).toInt())
-        if (debug) println("executing ${program.instructions.slice(pointer until pointer + instructionSize(opCode))} at $pointer")
+        if (debug) println("executing ${program.instructions.slice(pointer until pointer + instructionSize(opCode))} at :$pointer")
 
-        if (opCode is Terminate)
-            break@loop
+        if (opCode is Terminate) {
+            if (debug) println("Terminating with ${program.output}")
+            return SuspendedProgram(program.instructions.joinToString(","), program.output)
+        }
+
         if (opCode is Read && input.size == 0 && suspendOnRead) {
             val (updatedPointer, updatedInstructions) = program.execute(pointer)
             return SuspendedProgram(updatedInstructions.joinToString(","), program.output, updatedPointer, false)
         }
+
         val (updatedPointer, updatedInstructions) = program.execute(pointer)
         pointer = updatedPointer
         program = Program(updatedInstructions.toMutableList(), input, program.output, debug)
-        if (debug) println("next is  $pointer\n")
+        if (debug) println("next is :$pointer\n")
     }
-    if (debug) println("Terminating with ${program.output}")
-    return SuspendedProgram(program.instructions.joinToString(","), program.output)
 }
 
 data class SuspendedProgram(
@@ -231,42 +251,4 @@ data class SuspendedProgram(
         val terminated: Boolean = true
 )
 
-
-private fun printReadableProgram(program: Program, instructions: MutableList<Int>): Int {
-    var pointer = 0
-    loop@ while (true) {
-        val ins = program.instructions[pointer]
-        try {
-            val opCode = OpCode.fromInt(ins.toString().takeLast(2).toInt())
-
-            if (opCode is Terminate)
-                break@loop
-            val instruction = instructions[pointer].toString()
-
-            val opcode = if (instruction.length != 1) {
-                OpCode.fromInt(instruction.takeLast(2).toInt())
-            } else {
-                // backward compatibility for Day 2
-                OpCode.fromInt(instruction.toInt())
-            }
-            val parameterValues = instructions.slice((pointer + 1 until pointer + instructionSize(opcode)))
-
-            val modes = if (instruction.length != 1) {
-                val givenModes = instruction.dropLast(2)
-                givenModes.padStart(parameterValues.size, '0').asSequence().map { Character.getNumericValue(it) }.toList().reversed()
-            } else {
-                // backward compatibility for Day 2
-                List(parameterValues.size) { 0 }
-            }
-
-            val instruct = Instruction(opcode, parameterValues, modes)
-            println("$pointer: $instruct")
-            pointer += instructionSize(opcode)
-
-        } catch (e: java.lang.Exception) {
-            pointer++
-        }
-    }
-    return pointer
-}
 
