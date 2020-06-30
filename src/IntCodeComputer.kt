@@ -182,7 +182,7 @@ data class Program(val instructions: MutableList<Int>, val input: MutableList<In
     }
 
 
-    fun printReadable(): Int {
+    fun printReadable() {
         var pointer = 0
         loop@ while (pointer < instructions.size) {
             val ins = instructions[pointer]
@@ -200,7 +200,6 @@ data class Program(val instructions: MutableList<Int>, val input: MutableList<In
                 pointer++
             }
         }
-        return pointer
     }
 
 }
