@@ -21,13 +21,13 @@ private fun findPhaseSettings(program: String): Map<String, Int> {
     val phaseSettings = validPhaseSettings(0, 4)
 
     phaseSettings.forEach { settings ->
-        val programs = MutableList(5) { SuspendedProgram(program, 0, 0, false) }
+        val programs = MutableList(5) { SuspendedProgram(program, mutableListOf(0), 0, false) }
         val inputs = MutableList(5) { i -> mutableListOf(settings[i]) }
         inputs[0].add(0)
-        programs[0] = run(programs[0].instructions, inputs[0])
+        programs[0] = execute(programs[0].instructions, inputs[0])
         for (acs in (1..4)) {
             inputs[acs].add(programs[acs-1].output)
-            programs[acs] = run(programs[acs].instructions, inputs[acs])
+            programs[acs] = execute(programs[acs].instructions, inputs[acs])
         }
         outputs[settings.joinToString("")] = programs[4].output
     }
@@ -62,13 +62,13 @@ private fun findPhaseSettingsFeedback(program: String): Map<String, Int> {
     val phaseSettings = validPhaseSettings(5, 9)
 
     phaseSettings.forEach { settings ->
-        val programs = MutableList(5) { SuspendedProgram(program, 0, 0, false) }
+        val programs = MutableList(5) { SuspendedProgram(program, mutableListOf(0), 0, false) }
         val inputs = MutableList(5) { i -> mutableListOf(settings[i]) }
 
         while (!programs[4].terminated) {
             for (acs in (0..4)) {
                 inputs[acs].add(programs[(acs + 4) % 5].output)
-                programs[acs] = run(programs[acs].instructions, inputs[acs], programs[acs].pointer, suspendOnRead = true)
+                programs[acs] = execute(programs[acs].instructions, inputs[acs], programs[acs].pointer, suspendOnRead = true)
             }
             outputs[settings.joinToString("")] = programs[4].output
         }
