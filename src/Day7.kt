@@ -69,6 +69,7 @@ private fun findPhaseSettingsFeedback(program: String): Map<String, Int> {
             for (acs in (0..4)) {
                 inputs[acs].add(programs[(acs + 4) % 5].output)
                 programs[acs] = execute(programs[acs].instructions, inputs[acs], programs[acs].pointer, suspendOnRead = true)
+                inputs[acs].clear()
             }
             outputs[settings.joinToString("")] = programs[4].output
         }

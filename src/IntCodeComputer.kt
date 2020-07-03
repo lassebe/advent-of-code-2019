@@ -126,6 +126,7 @@ data class Program(
         var relativeBase: Long = 0L,
         val debug: Boolean = false
 ) {
+    override fun toString(): String = "i=$input o=$output"
 
     fun execute(pointer: Int): Pair<Int, List<Long>> {
         val instruction = parseInstruction(pointer)
@@ -151,9 +152,9 @@ data class Program(
                 } else if (opCode is Read) {
                     val value = interpretTarget(parameter)
                     if (input.size == 0) {
+                        if (debug) println("Read suspending until given input")
                         return Pair(pointer, instructions)
                     }
-                    if (debug) println("Relative Base ${relativeBase}")
                     if (debug) println("Read ${input[0]} into $value")
                     instructions[value.toInt()] = input.removeAt(0)
                 }
@@ -276,10 +277,10 @@ data class Program(
 }
 
 fun execute(programText: String, input: Int, debug: Boolean = false): SuspendedProgram =
-        execute(programText, mutableListOf(input), debug = debug)
+        execute(programText, listOf(input), debug = debug)
 
 fun execute(programText: String,
-            input: MutableList<Int> = mutableListOf(),
+            input: List<Int> = listOf(),
             initialPointer: Int = 0,
             debug: Boolean = false,
             suspendOnRead: Boolean = false
@@ -294,23 +295,22 @@ fun execute(programText: String,
     loop@ while (true) {
         val instruction = program.instructions[pointer]
         val opCode = OpCode.fromInt(instruction.toString().takeLast(2).toInt())
-        if (debug) println("executing ${program.instructions.slice(pointer until pointer + instructionSize(opCode))} at :$pointer")
+        if (debug) println("executing at :$pointer ${program.instructions.slice(pointer until pointer + instructionSize(opCode))} ")
 
         if (opCode is Terminate) {
             if (debug) println("Terminating with ${program.output}")
             return SuspendedProgram(program.instructions.joinToString(","), program.output)
         }
-
-        if (opCode is Read && input.size == 0 && suspendOnRead) {
-            val (updatedPointer, updatedInstructions) = program.execute(pointer)
-            return SuspendedProgram(updatedInstructions.joinToString(","), program.output, updatedPointer, false)
+        if (opCode is Read && program.input.size == 0 && suspendOnRead) {
+            if (debug) println("Suspending with ${program.output}")
+            return SuspendedProgram(program.instructions.joinToString(","), program.output, pointer, false)
         }
 
         val (updatedPointer, updatedInstructions) = program.execute(pointer)
         pointer = updatedPointer
         program = Program(
                 updatedInstructions.toMutableList(),
-                input.map { it.toLong() }.toMutableList(),
+                program.input,
                 program.output,
                 program.relativeBase,
                 debug
