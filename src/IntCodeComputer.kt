@@ -282,11 +282,12 @@ fun execute(programText: String, input: Int, debug: Boolean = false): SuspendedP
 fun execute(programText: String,
             input: List<Int> = listOf(),
             initialPointer: Int = 0,
+            relativeBase: Long = 0L,
             debug: Boolean = false,
             suspendOnRead: Boolean = false
 ): SuspendedProgram {
     val instructions = programText.split(",").map { it.toLong() }.toMutableList()
-    var program = Program(instructions, input = input.map { it.toLong() }.toMutableList(), debug = debug)
+    var program = Program(instructions, input = input.map { it.toLong() }.toMutableList(), relativeBase = relativeBase, debug = debug)
     var pointer = initialPointer
     if (debug) {
         program.printReadable()
@@ -295,15 +296,15 @@ fun execute(programText: String,
     loop@ while (true) {
         val instruction = program.instructions[pointer]
         val opCode = OpCode.fromInt(instruction.toString().takeLast(2).toInt())
-        if (debug) println("executing at :$pointer ${program.instructions.slice(pointer until pointer + instructionSize(opCode))} ")
+        if (debug) println(":$pointer ${program.instructions.slice(pointer until pointer + instructionSize(opCode))} ")
 
         if (opCode is Terminate) {
             if (debug) println("Terminating with ${program.output}")
-            return SuspendedProgram(program.instructions.joinToString(","), program.output)
+            return SuspendedProgram(program.instructions.joinToString(","), program.output, terminated = true)
         }
         if (opCode is Read && program.input.size == 0 && suspendOnRead) {
             if (debug) println("Suspending with ${program.output}")
-            return SuspendedProgram(program.instructions.joinToString(","), program.output, pointer, false)
+            return SuspendedProgram(program.instructions.joinToString(","), program.output, pointer, program.relativeBase)
         }
 
         val (updatedPointer, updatedInstructions) = program.execute(pointer)
@@ -323,7 +324,8 @@ data class SuspendedProgram(
         val instructions: String,
         val outputs: List<Long>,
         val pointer: Int = -1,
-        val terminated: Boolean = true
+        val relativeBase: Long = 0L,
+        val terminated: Boolean = false
 ) {
     val output: Int by lazy { outputs.last().toInt() }
 }

@@ -5,14 +5,13 @@ fun main() {
     var direction = Direction.Up
     var location = Pair(0, 0)
     val panels = mutableMapOf<Pair<Int, Int>, Int>()
-    // robot things
-    var program = execute(robotProgram, input = mutableListOf(0), suspendOnRead = true)
+
+    var program = execute(robotProgram, input = mutableListOf(1), suspendOnRead = true)
     println(program)
     val index = 0
     do {
         val colour = program.outputs[index].toInt()
         val nextDirection = program.outputs[index + 1].toInt()
-        println("painting $location: $colour, and turning $nextDirection")
 
         panels[location] = colour
         direction = if (nextDirection == 0) {
@@ -21,18 +20,33 @@ fun main() {
             turnRight(direction)
         }
         location = move(location, direction)
+
         val input = listOf(panels.getOrDefault(location, 0))
-        program = execute(program.instructions, initialPointer = program.pointer,  input = input, suspendOnRead = true)
+        program = execute(program.instructions, initialPointer = program.pointer, relativeBase = program.relativeBase, input = input, suspendOnRead = true)
     } while (!program.terminated)
 
-    println(panels.keys.size)
+    val minX = panels.keys.minBy { it.first }!!.first
+    val maxX = panels.keys.maxBy { it.first }!!.first
+    val minY = panels.keys.minBy { it.second }!!.second
+    val maxY = panels.keys.maxBy { it.second }!!.second
+
+    for (j in (maxY downTo minY)) {
+        for (i in (minX..maxX)) {
+            if (panels.getOrDefault(Pair(i, j), 0) == 0) {
+                print(".")
+            } else {
+                print("#")
+            }
+        }
+        println()
+    }
 }
 
 
 fun move(location: Pair<Int, Int>, direction: Direction) = when (direction) {
     Direction.Left -> Pair(location.first - 1, location.second)
     Direction.Right -> Pair(location.first + 1, location.second)
-    Direction.Up -> Pair(location.first , location.second + 1)
+    Direction.Up -> Pair(location.first, location.second + 1)
     Direction.Down -> Pair(location.first, location.second - 1)
 }
 

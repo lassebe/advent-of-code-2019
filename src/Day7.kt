@@ -21,7 +21,7 @@ private fun findPhaseSettings(program: String): Map<String, Int> {
     val phaseSettings = validPhaseSettings(0, 4)
 
     phaseSettings.forEach { settings ->
-        val programs = MutableList(5) { SuspendedProgram(program, mutableListOf(0), 0, false) }
+        val programs = MutableList(5) { SuspendedProgram(program, mutableListOf(0)) }
         val inputs = MutableList(5) { i -> mutableListOf(settings[i]) }
         inputs[0].add(0)
         programs[0] = execute(programs[0].instructions, inputs[0])
@@ -62,7 +62,7 @@ private fun findPhaseSettingsFeedback(program: String): Map<String, Int> {
     val phaseSettings = validPhaseSettings(5, 9)
 
     phaseSettings.forEach { settings ->
-        val programs = MutableList(5) { SuspendedProgram(program, mutableListOf(0), 0, false) }
+        val programs = MutableList(5) { SuspendedProgram(program, mutableListOf(0), 0) }
         val inputs = MutableList(5) { i -> mutableListOf(settings[i]) }
 
         while (!programs[4].terminated) {
